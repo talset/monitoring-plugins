@@ -49,6 +49,7 @@ PARSER.add_argument("-c", "--critical", type=str,
 ARGS = PARSER.parse_args()
 
 def compare(value,wlimit,climit):
+   global STATE
    if float(value) >= float(climit):
       if STATE < STATE_CRITICAL:
          STATE = STATE_CRITICAL
@@ -57,16 +58,14 @@ def compare(value,wlimit,climit):
          STATE = STATE_WARNING
 
 if __name__ == "__main__":
-
-
    if ARGS.lvname and ARGS.vgname:
       cmd="/sbin/lvs --noheadings -o data_percent,metadata_percent --separator '-' docker-vg/docker-pool"
       stdout = subprocess.check_output(cmd, shell=True)
       (lvdata,lvmeta) = re.split('-', stdout.strip().replace(',','.'))
       #check meta
-      compare(lvmeta,float(ARGS.warning),float(ARGS.critical))
+      compare(lvmeta,ARGS.warning,ARGS.critical)
       #check data
-      compare(lvdata,float(ARGS.warning),float(ARGS.critical))
+      compare(lvdata,ARGS.warning,ARGS.critical)
       
    print "%s: %s/%s - data(%s%%) meta(%s%%)" % (STATE_TEXT[STATE], ARGS.vgname, ARGS.lvname, lvdata, lvmeta)
    sys.exit(STATE)
