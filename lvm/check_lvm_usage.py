@@ -59,7 +59,7 @@ def compare(value,wlimit,climit):
 
 if __name__ == "__main__":
    if ARGS.lvname and ARGS.vgname:
-      cmd="/sbin/lvs --noheadings -o data_percent,metadata_percent --separator '-' docker-vg/docker-pool"
+      cmd="/sbin/lvs --noheadings -o data_percent,metadata_percent --separator '-' %s/%s" % (ARGS.vgname,ARGS.lvname)
       stdout = subprocess.check_output(cmd, shell=True)
       (lvdata,lvmeta) = re.split('-', stdout.strip().replace(',','.'))
       #check meta
