@@ -115,7 +115,7 @@ class Openshift(object):
          self.token=self._auth()
 
   def _auth(self):
-     cmd="oc login %s -u%s -p%s --insecure-skip-tls-verify=True 2>&1 > /dev/null" % (self.base_uri, self.username, self.password)
+     cmd="oc login %s:%s -u%s -p%s --insecure-skip-tls-verify=True 2>&1 > /dev/null" % (self.host, self.port, self.username, self.password)
      subprocess.check_output(cmd, shell=True)
 
      cmd="oc whoami -t"
