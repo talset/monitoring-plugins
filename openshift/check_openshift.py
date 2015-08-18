@@ -100,11 +100,6 @@ class Openshift(object):
      if password:
          self.password = password
 
-     if token:
-         self.token = token
-     else:
-         self.token=self._auth()
-
      if headers:
          self.headers = headers
 
@@ -113,6 +108,11 @@ class Openshift(object):
 
      self.debug = debug
      self.base_uri = self.proto + "://" + host +  self.base_api
+
+     if token:
+         self.token = token
+     else:
+         self.token=self._auth()
 
   def _auth(self):
      cmd="oc login %s -u%s -p%s --insecure-skip-tls-verify=True 2>&1 > /dev/null" % (self.base_uri, self.username, self.password)
