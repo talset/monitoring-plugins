@@ -75,3 +75,21 @@ optional arguments:
   --check_pods          Check status of pods ose-haproxy-router and ose-
                         docker-registry
 ```
+
+We suggest to use a permanant token from a ServiceAccount. Exemple on how create one
+
+
+```bash
+echo '{
+  "apiVersion": "v1",
+  "kind": "ServiceAccount",
+  "metadata": {
+    "name": "metrics"
+  }
+}' > metricsSA.json
+ 
+oc create -f metricsSA.json
+
+oc describe serviceaccount metrics
+oc describe secret metrics-token-bsd4v
+```
