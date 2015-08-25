@@ -200,12 +200,6 @@ class Openshift(object):
         self.os_OUTPUT_MESSAGE += router_dc_name + ' [Missing] '
         self.os_STATE = 2
 
-     # self.os_OUTPUT_MESSAGE += 
-     #item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + '['+ item["status"]["conditions"][0]["status"] + ' ' + item["status"]["conditions"][0]["reason"] + ']'
-     
-     #if self.os_STATE == 0:
-     #   self.os_OUTPUT_MESSAGE = 'docker-registry and router [Running]'
-
 
 if __name__ == "__main__":
 
@@ -231,8 +225,5 @@ if __name__ == "__main__":
 
   #host=os.getenv('OPENSHIFT_IP')
   #passwd=os.getenv('OPENSHIFT_PASSWD')
-
-   #myos = Openshift(host="axadev-enoshift-com", username='metrics', password="aom9ahVe")
-
 
    sys.exit(STATE)
