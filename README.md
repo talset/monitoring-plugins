@@ -92,4 +92,6 @@ oc create -f metricsSA.json
 
 oc describe serviceaccount metrics
 oc describe secret metrics-token-bsd4v
+
+oadm policy add-cluster-role-to-user cluster-reader system:serviceaccount:default:metrics
 ```
