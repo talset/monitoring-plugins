@@ -64,6 +64,13 @@ PARSER.add_argument("--check_nodes", action='store_true',
 PARSER.add_argument("--check_pods", action='store_true',
                     required=False,
                     help='Check status of pods ose-haproxy-router and ose-docker-registry')
+PARSER.add_argument("--check_regions", action='store_true',
+                    required=False,
+                    help='Check if your nodes are in your "OFFLINE" region. Only warning (define by --region_offline)')
+PARSER.add_argument("--region_offline", type=str,
+                    required=False,
+                    help='Your "OFFLINE" region name (Default: OFFLINE)',
+                    default="OFFLINE")
 ARGS = PARSER.parse_args()
 
 class Openshift(object):
@@ -200,6 +207,43 @@ class Openshift(object):
         self.os_OUTPUT_MESSAGE += router_dc_name + ' [Missing] '
         self.os_STATE = 2
 
+     # self.os_OUTPUT_MESSAGE += 
+     #item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + '['+ item["status"]["conditions"][0]["status"] + ' ' + item["status"]["conditions"][0]["reason"] + ']'
+     
+     #if self.os_STATE == 0:
+     #   self.os_OUTPUT_MESSAGE = 'docker-registry and router [Running]'
+
+
+  def get_regions(self,region_offline):
+
+     self.os_OUTPUT_MESSAGE += ' Nodes: '
+
+     api_nodes = self.base_api + 'nodes'
+     headers = {"Authorization": 'Bearer ' + self.token}
+     conn = httplib.HTTPSConnection(self.host, self.port)
+     conn.request("GET", api_nodes, "", headers)
+     r1 = conn.getresponse()
+     rjson = r1.read()
+     conn.close()
+     parsed_json = json.loads(rjson)
+
+     all_nodes_names=''
+     for item in parsed_json["items"]:
+       all_nodes_names+=item["metadata"]["name"] + ' '
+
+       #print item["metadata"]["labels"]["region"]
+       #print item["status"]["addresses"][0]["address"]
+       #print item["status"]["conditions"][0]["type"]
+       #print item["status"]["conditions"][0]["status"]
+       #print item["status"]["conditions"][0]["reason"]
+       #if status not ready
+       if item["metadata"]["labels"]["region"] == region_offline:
+          self.os_STATE = 1 #just warning
+          self.os_OUTPUT_MESSAGE += item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + ': [Region: '+ region_offline + '] '
+     
+     if self.os_STATE == 0:
+        self.os_OUTPUT_MESSAGE += all_nodes_names + '[schedulable]'
+
 
 if __name__ == "__main__":
 
@@ -211,6 +255,7 @@ if __name__ == "__main__":
       myos = Openshift(host=ARGS.host, port=ARGS.port, username=ARGS.username, password=ARGS.password, proto=ARGS.protocol)
    else:
       PARSER.print_help()
+      sys.exit(STATE_UNKNOWN)
 
    if ARGS.check_nodes:
       myos.get_nodes()
@@ -218,12 +263,14 @@ if __name__ == "__main__":
    if ARGS.check_pods:
       myos.get_pods()
 
-   STATE = myos.os_STATE
-   OUTPUT_MESSAGE = myos.os_OUTPUT_MESSAGE
+   if ARGS.check_regions:
+      myos.get_regions(ARGS.region_offline)
 
-   print "%s:%s" % (STATE_TEXT[STATE], OUTPUT_MESSAGE)
+   try:
+     STATE = myos.os_STATE
+     OUTPUT_MESSAGE = myos.os_OUTPUT_MESSAGE
 
-  #host=os.getenv('OPENSHIFT_IP')
-  #passwd=os.getenv('OPENSHIFT_PASSWD')
-
-   sys.exit(STATE)
+     print "%s:%s" % (STATE_TEXT[STATE], OUTPUT_MESSAGE)
+     sys.exit(STATE)
+   except ValueError:
+     print "Oops!  ValueError"

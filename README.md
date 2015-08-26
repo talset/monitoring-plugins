@@ -45,9 +45,10 @@ Critical: docker-vg/docker-pool - data(58.66%) meta(6.90%)
 Use token to request openshift api (/api/v1beta3/)  with Oauth.
 If you didn't have token, use user/pass to perform an "oc login" and get a token.
 
-2 checks are available
+3 checks are available
   * check_nodes : Request status of nodes through openshift API
   * check_pods : Request status of pods (with deployconfig : docker-registry and router)
+  * check_regions : Request regions affected on nodes and return warning if it's  match to your "OFFLINE" region
 
 Script help
 
@@ -55,7 +56,8 @@ Script help
 python check_openshift.py -h
 usage: check_openshift.py [-h] [-proto PROTOCOL] [-H HOST] [-P PORT]
                           [-u USERNAME] [-p PASSWORD] [-t TOKEN]
-                          [--check_nodes] [--check_pods]
+                          [--check_nodes] [--check_pods] [--check_regions]
+                          [--region_offline REGION_OFFLINE]
 
 Openshift check pods
 
@@ -71,9 +73,13 @@ optional arguments:
                         Password openshift
   -t TOKEN, --token TOKEN
                         Token openshift (use token or user/pass
-  --check_nodes         Check status of nodes
+  --check_nodes         Check status of all nodes
   --check_pods          Check status of pods ose-haproxy-router and ose-
                         docker-registry
+  --check_regions       Check if your nodes are in your "OFFLINE" region. Only
+                        warning (define by --region_offline)
+  --region_offline REGION_OFFLINE
+                        Your "OFFLINE" region name (Default: OFFLINE)
 ```
 
 We suggest to use a permanant token from a ServiceAccount. Exemple on how create one
