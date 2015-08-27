@@ -186,11 +186,16 @@ class Openshift(object):
        #print item["status"]["Condition"][0]["type"]
        #print item["status"]["Condition"][0]["status"]
 
-       if item["status"]["Condition"][0]["status"] != "True":
-          pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + ' ' + item["status"]["Condition"][0]["status"] + '] '
-          self.os_STATE = 2
-       else:
-          pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + '] '
+       try:
+         if item["status"]["Condition"][0]["status"] != "True":
+            pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + ' ' + item["status"]["Condition"][0]["status"] + '] '
+            self.os_STATE = 2
+         else:
+            pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + '] '
+
+       except ValueError:
+         pass
+
 
      registry_dc_name = 'docker-registry'
      router_dc_name = 'router'
@@ -273,4 +278,4 @@ if __name__ == "__main__":
      print "%s:%s" % (STATE_TEXT[STATE], OUTPUT_MESSAGE)
      sys.exit(STATE)
    except ValueError:
-     print "Oops!  ValueError"
+     print "Oops!  cant return STATE"
