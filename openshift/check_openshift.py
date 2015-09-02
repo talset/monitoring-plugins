@@ -25,6 +25,7 @@ import subprocess
 import httplib
 import json
 
+VERSION = '1.0'
 
 STATE_OK = 0
 STATE_WARNING = 1
@@ -71,6 +72,9 @@ PARSER.add_argument("--region_offline", type=str,
                     required=False,
                     help='Your "OFFLINE" region name (Default: OFFLINE)',
                     default="OFFLINE")
+PARSER.add_argument("-v", "--version", action='store_true',
+                    required=False,
+                    help='Print script version')
 ARGS = PARSER.parse_args()
 
 class Openshift(object):
@@ -253,6 +257,10 @@ class Openshift(object):
 if __name__ == "__main__":
 
    # https://docs.openshift.com/enterprise/3.0/rest_api/openshift_v1.html
+
+   if ARGS.version:
+      print "version: %s" % (VERSION)
+      sys.exit(0)
 
    if ARGS.token:
       myos = Openshift(host=ARGS.host, port=ARGS.port, token=ARGS.token, proto=ARGS.protocol)

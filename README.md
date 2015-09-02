@@ -80,6 +80,7 @@ optional arguments:
                         warning (define by --region_offline)
   --region_offline REGION_OFFLINE
                         Your "OFFLINE" region name (Default: OFFLINE)
+  -v, --version         Print script version
 ```
 
 We suggest to use a permanant token from a ServiceAccount. Exemple on how create one
