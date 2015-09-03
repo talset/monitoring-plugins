@@ -175,11 +175,10 @@ class Openshift(object):
        #if status not ready
        if item["status"]["conditions"][0]["status"] != "True":
           self.os_STATE = 2
-          self.os_OUTPUT_MESSAGE += item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + ': ['+ item["status"]["conditions"][0]["status"] + ' ' + item["status"]["conditions"][0]["reason"] + '] '
+          self.os_OUTPUT_MESSAGE += "%s/%s: [%s %s] " % (item["metadata"]["name"], item["status"]["addresses"][0]["address"], item["status"]["conditions"][0]["status"], item["status"]["conditions"][0]["reason"])
      
      if self.os_STATE == 0:
-        self.os_OUTPUT_MESSAGE += all_nodes_names + '[Ready]'
-
+        self.os_OUTPUT_MESSAGE += "%s [Ready]" % (all_nodes_names)
      
   def get_pods(self,namespace=None):
 
@@ -208,12 +207,11 @@ class Openshift(object):
        try:
          if item["status"]["Condition"][0]["status"] != "True":
             if 'deploymentconfig' in item["metadata"]["labels"].keys():
-              pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + ' ' + item["status"]["Condition"][0]["status"] + '] '
+              pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"], item["status"]["phase"], item["status"]["Condition"][0]["status"] )
               self.os_STATE = 2
          else:
             if 'deploymentconfig' in item["metadata"]["labels"].keys():
-              pods[item["metadata"]["labels"]["deploymentconfig"]] = item["metadata"]["name"] + ': [' + item["status"]["phase"] + '] '
-
+              pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"], item["status"]["phase"])
        except:
          pass
 
@@ -232,12 +230,6 @@ class Openshift(object):
      else:
         self.os_OUTPUT_MESSAGE += router_dc_name + ' [Missing] '
         self.os_STATE = 2
-
-     # self.os_OUTPUT_MESSAGE += 
-     #item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + '['+ item["status"]["conditions"][0]["status"] + ' ' + item["status"]["conditions"][0]["reason"] + ']'
-     
-     #if self.os_STATE == 0:
-     #   self.os_OUTPUT_MESSAGE = 'docker-registry and router [Running]'
 
 
   def get_labels(self,label_offline):
@@ -265,7 +257,7 @@ class Openshift(object):
        #if status not ready
        if label_offline in item["metadata"]["labels"].keys():
           self.os_STATE = 1 #just warning
-          self.os_OUTPUT_MESSAGE += item["metadata"]["name"] + '/' + item["status"]["addresses"][0]["address"] + ': [Label: '+ label_offline + '] '
+          self.os_OUTPUT_MESSAGE += "%s/%s: [Label: %s] " % (item["metadata"]["name"], item["status"]["addresses"][0]["address"], label_offline)
      
      if self.os_STATE == 0:
         self.os_OUTPUT_MESSAGE += all_nodes_names + '[schedulable]'
