@@ -56,7 +56,7 @@ Script help
 usage: check_openshift.py [-h] [-proto PROTOCOL] [-H HOST] [-P PORT]
                           [-u USERNAME] [-p PASSWORD] [-to TOKEN]
                           [-tf TOKENFILE] [--check_nodes] [--check_pods]
-                          [--check_regions] [--label_offline LABEL_OFFLINE]
+                          [--check_labels] [--label_offline LABEL_OFFLINE]
                           [-v]
 
 Openshift check pods
@@ -78,7 +78,7 @@ optional arguments:
   --check_nodes         Check status of all nodes
   --check_pods          Check status of pods ose-haproxy-router and ose-
                         docker-registry
-  --check_regions       Check if your nodes are in your "OFFLINE" region. Only
+  --check_labels        Check if your nodes have your "OFFLINE" label. Only
                         warning (define by --label_offline)
   --label_offline LABEL_OFFLINE
                         Your "OFFLINE" label name (Default: retiring)
