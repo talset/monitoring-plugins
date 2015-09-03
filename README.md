@@ -105,3 +105,28 @@ oc describe secret metrics-token-bsd4v
 
 oadm policy add-cluster-role-to-user cluster-reader system:serviceaccount:default:metrics
 ```
+
+For retiring label we suggest to use this predicates line
+
+```bash
+{
+  "predicates": [
+    {"name": "MatchNodeSelector"},
+    {"name": "PodFitsResources"},
+    {"name": "PodFitsPorts"},
+    {"name": "NoDiskConflict"},
+    {"name": "Region", "argument": {"serviceAffinity" : {"labels" : ["region"]}}},
+    {"name" : "RequireRegion", "argument" : {"labelsPresence" : {"labels" : ["retiring"], "presence" : false}}}
+  ],"priorities": [
+    {"name": "LeastRequestedPriority", "weight": 1},
+    {"name" : "BalancedResourceAllocation", "weight" : 1},
+    {"name": "ServiceSpreadingPriority", "weight": 1}
+  ]
+}
+```
+
+And when you need, add the retiring label
+
+```bash
+oc edit node mynode
+```
