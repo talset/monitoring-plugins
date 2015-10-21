@@ -160,7 +160,12 @@ class Openshift(object):
      r1 = conn.getresponse()
      rjson = r1.read()
      conn.close()
-     parsed_json = json.loads(rjson)
+     try:
+       parsed_json = json.loads(rjson)
+     except ValueError:
+       print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN],api_nodes , rjson)
+       sys.exit(STATE_UNKNOWN)
+       
 
      all_nodes_names=''
      for item in parsed_json["items"]:
@@ -194,7 +199,11 @@ class Openshift(object):
      r1 = conn.getresponse()
      rjson = r1.read()
      conn.close()
-     parsed_json = json.loads(rjson)
+     try:
+       parsed_json = json.loads(rjson)
+     except ValueError:
+       print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN], api_pods, rjson)
+       sys.exit(STATE_UNKNOWN)
 
      pods = {}
      for item in parsed_json["items"]:
