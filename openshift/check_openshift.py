@@ -121,7 +121,7 @@ class Openshift(object):
          self.verbose = verbose
 
      self.debug = debug
-     self.base_uri = self.proto + "://" + host +  self.base_api
+     self.base_uri = self.proto + "://" + self.host +  self.base_api
 
      if token:
          self.token = token
