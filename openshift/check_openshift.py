@@ -89,46 +89,31 @@ class Openshift(object):
   A little object for use REST openshift v3 api
   """
 
-  proto = 'https'
-  host = '127.0.0.1'
-  port = 8443
-  username = None
-  password = None
-  token = None
-  headers = None
-  response = None
-  base_uri = None
-  base_api = '/api/v1beta3/'
-  verbose = False
-  debug = False
-  namespace = "default"
-  os_STATE = 0
-  os_OUTPUT_MESSAGE = ''
+  def __init__(self,
+               proto='https',
+               host='127.0.0.1',
+               port=8443,
+               username=None,
+               password=None,
+               token=None,
+               tokenfile=None,
+               debug=False,
+               verbose=False,
+               namespace='default',
+               base_api='/api/v1/'):
 
-  def __init__(self, host=None, port=8443, username=username, password=password, token=None, tokenfile=None, debug=False, verbose=False, proto=None, headers=None, base_api=None):
-     if proto is not None:
-         self.proto = proto
+     self.os_STATE = 0
+     self.os_OUTPUT_MESSAGE = ''
 
-     if host is not None:
-         self.host = host
-
-     if username:
-         self.username = username
-
-     if password:
-         self.password = password
-
-     if headers:
-         self.headers = headers
-
-     if verbose:
-         self.verbose = verbose
-
-     if base_api:
-         self.base_api = base_api
-
-     self.debug = debug
-     self.base_uri = self.proto + "://" + self.host +  self.base_api
+     self.proto     = proto
+     self.host      = host
+     self.port      = port
+     self.username  = username
+     self.password  = password
+     self.debug     = debug
+     self.verbose   = verbose
+     self.namespace = namespace
+     self.base_api  = base_api
 
      if token:
          self.token = token
