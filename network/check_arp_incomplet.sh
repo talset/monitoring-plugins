@@ -44,12 +44,12 @@ print_help() {
 check_incomplet() {
   #check the number of incomplet ARP
   ARP_INCOMPLET=`arp -a | grep incomplet | wc -l`
-  if [ -z "$NFS_EXPORTS" ]; then
-  	echo "ARP OK : 0 incomplet"
-  	exit $STATE_UNKNOWN
+  if [ "$ARP_INCOMPLET" -gt "0" ]; then
+    echo "ARP CRITICAL : ${ARP_INCOMPLET} incomplet"
+    exit $STATE_CRITICAL
   else 
-      echo "ARP CRITICAL : ${ARP_INCOMPLET} incomplet"
-      exit $STATE_CRITICAL
+  	echo "ARP OK : 0 incomplet"
+  	exit $STATE_OK
   fi
 }
 
