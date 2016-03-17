@@ -22,8 +22,13 @@
 import sys
 import argparse
 import subprocess
-import httplib
-import json
+import requests
+
+# Disable warning for insecure https
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+from requests.exceptions import ConnectionError
 
 VERSION = '1.1'
 
@@ -39,311 +44,315 @@ OUTPUT_MESSAGE = ''
 
 PARSER = argparse.ArgumentParser(description='Openshift check pods')
 PARSER.add_argument("-proto", "--protocol", type=str,
-                    required=False,
                     help='Protocol openshift (Default : https)',
                     default="https")
 PARSER.add_argument("-api", "--base_api", type=str,
-                    required=False,
-                    help='Url api and version (Default : /api/v1/)',
-                    default="/api/v1/")
+                    help='Url api and version (Default : /api/v1)',
+                    default="/api/v1")
 PARSER.add_argument("-H", "--host", type=str,
-                    required=False,
                     help='Host openshift (Default : 127.0.0.1)',
                     default="127.0.0.1")
 PARSER.add_argument("-P", "--port", type=str,
-                    required=False,
                     help='Port openshift (Default : 8443)',
                     default=8443)
 PARSER.add_argument("-u", "--username", type=str,
-                    required=False,
                     help='Username openshift (ex : sensu)')
 PARSER.add_argument("-p", "--password", type=str,
-                    required=False,
                     help='Password openshift')
 PARSER.add_argument("-to", "--token", type=str,
-                    required=False,
                     help='File with token openshift (like -t)')
 PARSER.add_argument("-tf", "--tokenfile", type=str,
-                    required=False,
                     help='Token openshift (use token or user/pass')
 PARSER.add_argument("--check_nodes", action='store_true',
-                    required=False,
                     help='Check status of all nodes')
 PARSER.add_argument("--check_pods", action='store_true',
-                    required=False,
                     help='Check status of pods ose-haproxy-router and ose-docker-registry')
 PARSER.add_argument("--check_scheduling", action='store_true',
-                    required=False,
                     help='Check if your nodes is in SchedulingDisabled stat. Only warning')
 PARSER.add_argument("--check_labels", action='store_true',
-                    required=False,
                     help='Check if your nodes have your "OFFLINE" label. Only warning (define by --label_offline)')
 PARSER.add_argument("--label_offline", type=str,
-                    required=False,
                     help='Your "OFFLINE" label name (Default: retiring)',
                     default="retiring")
 PARSER.add_argument("-v", "--version", action='store_true',
-                    required=False,
                     help='Print script version')
 ARGS = PARSER.parse_args()
 
+
 class Openshift(object):
-  """
-  A little object for use REST openshift v3 api
-  """
+    """
+    A little object for use REST openshift v3 api
+    """
 
-  def __init__(self,
-               proto='https',
-               host='127.0.0.1',
-               port=8443,
-               username=None,
-               password=None,
-               token=None,
-               tokenfile=None,
-               debug=False,
-               verbose=False,
-               namespace='default',
-               base_api='/api/v1/'):
+    def __init__(self,
+                 proto='https',
+                 host='127.0.0.1',
+                 port=8443,
+                 username=None,
+                 password=None,
+                 token=None,
+                 tokenfile=None,
+                 debug=False,
+                 verbose=False,
+                 namespace='default',
+                 base_api='/api/v1'):
 
-     self.os_STATE = 0
-     self.os_OUTPUT_MESSAGE = ''
+        self.os_STATE = 0
+        self.os_OUTPUT_MESSAGE = ''
 
-     self.proto     = proto
-     self.host      = host
-     self.port      = port
-     self.username  = username
-     self.password  = password
-     self.debug     = debug
-     self.verbose   = verbose
-     self.namespace = namespace
-     self.base_api  = base_api
+        self.proto = proto
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
+        self.debug = debug
+        self.verbose = verbose
+        self.namespace = namespace
+        # Remove the trailing / to avoid user issue
+        self.base_api = base_api.rstrip('/')
 
-     if token:
-         self.token = token
-     elif tokenfile:
-         self.token=self._tokenfile(tokenfile)
-     else:
-         self.token=self._auth()
+        if token:
+            self.token = token
+        elif tokenfile:
+            self.token = self._tokenfile(tokenfile)
+        else:
+            self.token = self._auth()
 
-  def _auth(self):
-     cmd="oc login %s:%s -u%s -p%s --insecure-skip-tls-verify=True 2>&1 > /dev/null" % (self.host, self.port, self.username, self.password)
-     subprocess.check_output(cmd, shell=True)
+    def _auth(self):
+        cmd = ("oc login %s:%s -u%s -p%s --insecure-skip-tls-verify=True 2>&1 > /dev/null"
+               % (self.host, self.port, self.username, self.password))
+        subprocess.check_output(cmd, shell=True)
 
-     cmd="oc whoami -t"
-     stdout = subprocess.check_output(cmd, shell=True)
+        cmd = "oc whoami -t"
+        stdout = subprocess.check_output(cmd, shell=True)
 
-     return stdout.strip()
+        return stdout.strip()
 
-  def _tokenfile(self,tokenfile):
-     try:
-       f = open(tokenfile, 'r')
-       return f.readline().strip()
-     except IOError:
-       self.os_OUTPUT_MESSAGE += ' Error: File does not appear to exist'
-       self.os_STATE = 2
-       return "tokenfile-inaccessible"
-       
-  def get_scheduling(self):
+    def _tokenfile(self, tokenfile):
+        try:
+            f = open(tokenfile, 'r')
+            return f.readline().strip()
+        except IOError:
+            self.os_OUTPUT_MESSAGE += ' Error: File does not appear to exist'
+            self.os_STATE = 2
+            return "tokenfile-inaccessible"
 
-     self.os_OUTPUT_MESSAGE += ' Nodes: '
+    def get_json(self, url):
 
-     api_nodes = self.base_api + 'nodes'
-     headers = {"Authorization": 'Bearer ' + self.token}
-     conn = httplib.HTTPSConnection(self.host, self.port)
-     conn.request("GET", api_nodes, "", headers)
-     r1 = conn.getresponse()
-     rjson = r1.read()
-     conn.close()
-     try:
-       parsed_json = json.loads(rjson)
-     except ValueError:
-       print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN],api_nodes , rjson)
-       sys.exit(STATE_UNKNOWN)
-       
+        headers = {"Authorization": 'Bearer %s' % self.token}
+        try:
+            r = requests.get('https://%s:%s%s' % (self.host, self.port, url),
+                             headers=headers,
+                             verify=False)  # don't check ssl
+            parsed_json = r.json()
+        except ValueError:
+            print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN], url, r.text[:200])
+            sys.exit(STATE_UNKNOWN)
+        except ConnectionError as e:
+            print "https://%s:%s%s - %s" % (self.host, self.port, url, e)
+            sys.exit(STATE_CRITICAL)
 
-     all_nodes_names=''
-     for item in parsed_json["items"]:
-       all_nodes_names+=item["metadata"]["name"] + ' '
+        return parsed_json
 
-       #print item["metadata"]["name"]
-       #print item["status"]["addresses"][0]["address"]
-       #print item["status"]["conditions"][0]["type"]
-       #print item["status"]["conditions"][0]["status"]
-       #print item["status"]["conditions"][0]["reason"]
+    def get_scheduling(self):
 
-       try:
-         if item["spec"]["unschedulable"]:
-           self.os_STATE = 1
-           schedule_flag = True
-           self.os_OUTPUT_MESSAGE += "%s/%s: [SchedulingDisabled] " % (item["metadata"]["name"], item["status"]["addresses"][0]["address"])
-       except:
-         schedule_flag = False
+        self.os_OUTPUT_MESSAGE += ' Nodes: '
 
-     if self.os_STATE == 0:
-        self.os_OUTPUT_MESSAGE += "%s [Schedulable]" % (all_nodes_names)
+        api_nodes = '%s/nodes' % self.base_api
+        parsed_json = self.get_json(api_nodes)
 
-  def get_nodes(self):
+        # Return unknow if we can't find datas
+        if 'items' not in parsed_json:
+            self.os_STATE = STATE_UNKNOWN
+            self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
+            return
 
-     self.os_OUTPUT_MESSAGE += ' Nodes: '
+        all_nodes_names = ''
+        for item in parsed_json["items"]:
+            all_nodes_names += '%s ' % item["metadata"]["name"]
 
-     api_nodes = self.base_api + 'nodes'
-     headers = {"Authorization": 'Bearer ' + self.token}
-     conn = httplib.HTTPSConnection(self.host, self.port)
-     conn.request("GET", api_nodes, "", headers)
-     r1 = conn.getresponse()
-     rjson = r1.read()
-     conn.close()
-     try:
-       parsed_json = json.loads(rjson)
-     except ValueError:
-       print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN],api_nodes , rjson)
-       sys.exit(STATE_UNKNOWN)
-       
+            # print item["metadata"]["name"]
+            # print item["status"]["addresses"][0]["address"]
+            # print item["status"]["conditions"][0]["type"]
+            # print item["status"]["conditions"][0]["status"]
+            # print item["status"]["conditions"][0]["reason"]
 
-     all_nodes_names=''
-     for item in parsed_json["items"]:
-       all_nodes_names+=item["metadata"]["name"] + ' '
+            try:
+                if item["spec"]["unschedulable"]:
+                    self.os_STATE = 1
+                    self.os_OUTPUT_MESSAGE += ("%s/%s: [SchedulingDisabled] "
+                                               % (item["metadata"]["name"], item["status"]["addresses"][0]["address"]))
+            except KeyError:
+                continue
 
-       #print item["metadata"]["name"]
-       #print item["status"]["addresses"][0]["address"]
-       #print item["status"]["conditions"][0]["type"]
-       #print item["status"]["conditions"][0]["status"]
-       #print item["status"]["conditions"][0]["reason"]
+        if self.os_STATE == 0:
+            self.os_OUTPUT_MESSAGE += "%s [Schedulable]" % (all_nodes_names)
 
-       #if status not ready
-       if item["status"]["conditions"][0]["status"] != "True":
-          self.os_STATE = 2
-          self.os_OUTPUT_MESSAGE += "%s/%s: [%s %s] " % (item["metadata"]["name"], item["status"]["addresses"][0]["address"], item["status"]["conditions"][0]["status"], item["status"]["conditions"][0]["reason"])
-     
-     if self.os_STATE == 0:
-        self.os_OUTPUT_MESSAGE += "%s [Ready]" % (all_nodes_names)
-     
-  def get_pods(self,namespace=None):
+    def get_nodes(self):
 
-     self.os_OUTPUT_MESSAGE += ' Pods: '
+        self.os_OUTPUT_MESSAGE += ' Nodes: '
 
-     if namespace:
-         self.namespace = namespace
-     api_pods = self.base_api + 'namespaces/' + self.namespace + '/pods'
+        api_nodes = '%s/nodes' % self.base_api
+        parsed_json = self.get_json(api_nodes)
 
-     headers = {"Authorization": 'Bearer ' + self.token}
-     conn = httplib.HTTPSConnection(self.host, self.port)
-     conn.request("GET", api_pods, "", headers)
-     r1 = conn.getresponse()
-     rjson = r1.read()
-     conn.close()
-     try:
-       parsed_json = json.loads(rjson)
-     except ValueError:
-       print "%s: GET %s %s" % (STATE_TEXT[STATE_UNKNOWN], api_pods, rjson)
-       sys.exit(STATE_UNKNOWN)
+        # Return unknow if we can't find datas
+        if 'items' not in parsed_json:
+            self.os_STATE = STATE_UNKNOWN
+            self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
+            return
 
-     pods = {}
+        all_nodes_names = ''
+        for item in parsed_json["items"]:
+            all_nodes_names += '%s ' % item["metadata"]["name"]
 
-     if self.base_api == '/api/v1beta3/':
-        status_condition = 'Condition'
-     else:
-        status_condition = 'conditions'
-     
-     for item in parsed_json["items"]:
-       #print item["metadata"]["name"]
-       #print item["metadata"]["labels"]["deploymentconfig"]
-       #print item["status"]["phase"]
-       #print item["status"][status_condition][0]["type"]
-       #print item["status"][status_condition][0]["status"]
-       try:
-         if item["status"][status_condition][0]["status"] != "True":
-            if 'deploymentconfig' in item["metadata"]["labels"].keys():
-              pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"], item["status"]["phase"], item["status"][status_condition][0]["status"] )
-              self.os_STATE = 2
-         else:
-            if 'deploymentconfig' in item["metadata"]["labels"].keys():
-              pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"], item["status"]["phase"])
-       except:
-         pass
+            # print item["metadata"]["name"]
+            # print item["status"]["addresses"][0]["address"]
+            # print item["status"]["conditions"][0]["type"]
+            # print item["status"]["conditions"][0]["status"]
+            # print item["status"]["conditions"][0]["reason"]
 
-     registry_dc_name = 'docker-registry'
-     router_dc_name = 'router'
+            # if status not ready
+            if item["status"]["conditions"][0]["status"] != "True":
+                self.os_STATE = 2
+                self.os_OUTPUT_MESSAGE += "%s/%s: [%s %s] " % (item["metadata"]["name"],
+                                                               item["status"]["addresses"][0]["address"],
+                                                               item["status"]["conditions"][0]["status"],
+                                                               item["status"]["conditions"][0]["reason"])
 
-     if registry_dc_name in pods:
-        self.os_OUTPUT_MESSAGE += pods[registry_dc_name]
-     else:
-        self.os_OUTPUT_MESSAGE += registry_dc_name + ' [Missing] '
-        self.os_STATE = 2
+        if self.os_STATE == 0:
+            self.os_OUTPUT_MESSAGE += "%s [Ready]" % (all_nodes_names)
 
-     if router_dc_name in pods:
-        self.os_OUTPUT_MESSAGE += pods[router_dc_name]
-     else:
-        self.os_OUTPUT_MESSAGE += router_dc_name + ' [Missing] '
-        self.os_STATE = 2
+    def get_pods(self, namespace=None):
 
+        self.os_OUTPUT_MESSAGE += ' Pods: '
 
-  def get_labels(self,label_offline):
+        if namespace:
+            self.namespace = namespace
+        api_pods = '%s/namespaces/%s/pods' % (self.base_api, self.namespace)
 
-     self.os_OUTPUT_MESSAGE += ' Nodes: '
+        parsed_json = self.get_json(api_pods)
 
-     api_nodes = self.base_api + 'nodes'
-     headers = {"Authorization": 'Bearer ' + self.token}
-     conn = httplib.HTTPSConnection(self.host, self.port)
-     conn.request("GET", api_nodes, "", headers)
-     r1 = conn.getresponse()
-     rjson = r1.read()
-     conn.close()
-     parsed_json = json.loads(rjson)
+        pods = {}
 
-     all_nodes_names=''
-     for item in parsed_json["items"]:
-       all_nodes_names+=item["metadata"]["name"] + ' '
+        if self.base_api == '/api/v1beta3':
+            status_condition = 'Condition'
+        else:
+            status_condition = 'conditions'
 
-       #print item["metadata"]["labels"]["region"]
-       #print item["status"]["addresses"][0]["address"]
-       #print item["status"]["conditions"][0]["type"]
-       #print item["status"]["conditions"][0]["status"]
-       #print item["status"]["conditions"][0]["reason"]
-       #if status not ready
-       if label_offline in item["metadata"]["labels"].keys():
-          self.os_STATE = 1 #just warning
-          self.os_OUTPUT_MESSAGE += "%s/%s: [Label: %s] " % (item["metadata"]["name"], item["status"]["addresses"][0]["address"], label_offline)
-     
-     if self.os_STATE == 0:
-        self.os_OUTPUT_MESSAGE += all_nodes_names + '[schedulable]'
+        # Return unknow if we can't find datas
+        if 'items' not in parsed_json:
+            self.os_STATE = STATE_UNKNOWN
+            self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
+            return
+
+        for item in parsed_json["items"]:
+            # print item["metadata"]["name"]
+            # print item["metadata"]["labels"]["deploymentconfig"]
+            # print item["status"]["phase"]
+            # print item["status"][status_condition][0]["type"]
+            # print item["status"][status_condition][0]["status"]
+
+            try:
+                if item["status"][status_condition][0]["status"] != "True":
+                    if 'deploymentconfig' in item["metadata"]["labels"].keys():
+                        pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"],
+                                                                                              item["status"]["phase"],
+                                                                                              item["status"][status_condition][0]["status"])
+                        self.os_STATE = 2
+                else:
+                    if 'deploymentconfig' in item["metadata"]["labels"].keys():
+                        pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"],
+                                                                                         item["status"]["phase"])
+            except:
+                pass
+
+        registry_dc_name = 'docker-registry'
+        router_dc_name = 'router'
+
+        if registry_dc_name in pods:
+            self.os_OUTPUT_MESSAGE += pods[registry_dc_name]
+        else:
+            self.os_OUTPUT_MESSAGE += '%s [Missing] ' % registry_dc_name
+            self.os_STATE = 2
+
+        if router_dc_name in pods:
+            self.os_OUTPUT_MESSAGE += pods[router_dc_name]
+        else:
+            self.os_OUTPUT_MESSAGE += '%s [Missing] ' % router_dc_name
+            self.os_STATE = 2
+
+    def get_labels(self, label_offline):
+
+        self.os_OUTPUT_MESSAGE += ' Nodes: '
+
+        api_nodes = '%s/nodes' % self.base_api
+        parsed_json = self.get_json(api_nodes)
+
+        # Return unknow if we can't find datas
+        if 'items' not in parsed_json:
+            self.os_STATE = STATE_UNKNOWN
+            self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
+            return
+
+        all_nodes_names = ''
+        for item in parsed_json["items"]:
+            all_nodes_names += '%s ' % item["metadata"]["name"]
+
+            # print item["metadata"]["labels"]["region"]
+            # print item["status"]["addresses"][0]["address"]
+            # print item["status"]["conditions"][0]["type"]
+            # print item["status"]["conditions"][0]["status"]
+            # print item["status"]["conditions"][0]["reason"]
+
+            # if status not ready
+            if label_offline in item["metadata"]["labels"].keys():
+                self.os_STATE = 1  # just warning
+                self.os_OUTPUT_MESSAGE += "%s/%s: [Label: %s] " % (item["metadata"]["name"],
+                                                                   item["status"]["addresses"][0]["address"],
+                                                                   label_offline)
+
+        if self.os_STATE == 0:
+            self.os_OUTPUT_MESSAGE += '%s[schedulable]' % all_nodes_names
 
 
 if __name__ == "__main__":
 
-   # https://docs.openshift.com/enterprise/3.0/rest_api/openshift_v1.html
+    # https://docs.openshift.com/enterprise/3.0/rest_api/openshift_v1.html
 
-   if ARGS.version:
-      print "version: %s" % (VERSION)
-      sys.exit(0)
+    if ARGS.version:
+        print "version: %s" % (VERSION)
+        sys.exit(0)
 
-   if ARGS.token:
-      myos = Openshift(host=ARGS.host, port=ARGS.port, token=ARGS.token, proto=ARGS.protocol, base_api=ARGS.base_api)
-   elif ARGS.tokenfile:
-      myos = Openshift(host=ARGS.host, port=ARGS.port, tokenfile=ARGS.tokenfile, proto=ARGS.protocol, base_api=ARGS.base_api)
-   elif ARGS.username and ARGS.password:
-      myos = Openshift(host=ARGS.host, port=ARGS.port, username=ARGS.username, password=ARGS.password, proto=ARGS.protocol, base_api=ARGS.base_api)
-   else:
-      PARSER.print_help()
-      sys.exit(STATE_UNKNOWN)
+    if not ARGS.token and not ARGS.tokenfile and not (ARGS.username and ARGS.password):
+        PARSER.print_help()
+        sys.exit(STATE_UNKNOWN)
 
-   if ARGS.check_nodes:
-      myos.get_nodes()
+    myos = Openshift(host=ARGS.host,
+                     port=ARGS.port,
+                     username=ARGS.username,
+                     password=ARGS.password,
+                     token=ARGS.token,
+                     tokenfile=ARGS.tokenfile,
+                     proto=ARGS.protocol,
+                     base_api=ARGS.base_api)
 
-   if ARGS.check_pods:
-      myos.get_pods()
+    if ARGS.check_nodes:
+        myos.get_nodes()
 
-   if ARGS.check_labels:
-      myos.get_labels(ARGS.label_offline)
+    if ARGS.check_pods:
+        myos.get_pods()
 
-   if ARGS.check_scheduling:
-      myos.get_scheduling()
+    if ARGS.check_labels:
+        myos.get_labels(ARGS.label_offline)
 
-   try:
-     STATE = myos.os_STATE
-     OUTPUT_MESSAGE = myos.os_OUTPUT_MESSAGE
+    if ARGS.check_scheduling:
+        myos.get_scheduling()
 
-     print "%s:%s" % (STATE_TEXT[STATE], OUTPUT_MESSAGE)
-     sys.exit(STATE)
-   except ValueError:
-     print "Oops!  cant return STATE"
+    try:
+        STATE = myos.os_STATE
+        OUTPUT_MESSAGE = myos.os_OUTPUT_MESSAGE
+
+        print "%s:%s" % (STATE_TEXT[STATE], OUTPUT_MESSAGE)
+        sys.exit(STATE)
+    except ValueError:
+        print "Oops!  cant return STATE"
