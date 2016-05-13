@@ -162,7 +162,7 @@ class Openshift(object):
     def check_df(self, pod):
         print "check_df"
 
-        df_cmd = "df --exclude-type=tmpfs --exclude-type=devtmpfs --output=source,target,fstype,iused,itotal,ipcent,used,size,pcent"
+        df_cmd = "df --exclude-type=tmpfs --exclude-type=devtmpfs --output=source,target,fstype,iused,itotal,ipcent,used,size,pcent --block-size G"
         cmd = ("oc -n %s rsh %s %s 2>&1"
                % (self.namespace, pod, df_cmd))
         stdout = subprocess.check_output(cmd, shell=True).strip().split("\n")
@@ -170,15 +170,42 @@ class Openshift(object):
         del stdout[0]
 
         for line in stdout:
-           print line.split()
-        
+           col = line.split()
+           #size
+           csize = int(col[8][:-1])
+           if csize >= int(self.warning):
+               status = "Warning"
+               #Update state warning only if the current is not critical
+               if self.os_STATE < STATE_CRITICAL:
+                   self.os_STATE = STATE_WARNING
+               if csize >= int(self.critical):
+                   self.os_STATE = STATE_CRITICAL
+               #self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s - %s/%s %s used" % (pod, col[0], col[1], col[6], col[7], col[8])
+               self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s Used ||" % (pod, col[1], col[8])
 
-    def get_pods(self, podname=None, namespace=None, check=None):
+           #inode
+           cinode = int(col[6][:-1])
+           if cinode >= int(self.warning):
+               status = "Warning"
+               #Update state warning only if the current is not critical
+               if self.os_STATE < STATE_CRITICAL:
+                   self.os_STATE = STATE_WARNING
+               if cinode >= int(self.critical):
+                   self.os_STATE = STATE_CRITICAL
+               #self.os_OUTPUT_MESSAGE += " Disk Inode %s: %s %s - %s/%s %s used" % (pod, col[0], col[1], col[3], col[4], col[5])
+               self.os_OUTPUT_MESSAGE += " Disk Inode %s: %s %s Used ||" % (pod, col[1], col[5])
 
-        self.os_OUTPUT_MESSAGE += ' Pods: '
+    def get_pods(self, podname=None, namespace=None, check=None, warning=None, critical=None):
+
 
         if namespace:
             self.namespace = namespace
+
+        if warning:
+            self.warning = warning
+        if critical:
+            self.critical = critical
+
         api_pods = '%s/namespaces/%s/pods' % (self.base_api, self.namespace)
 
         parsed_json = self.get_json(api_pods)
@@ -211,26 +238,9 @@ class Openshift(object):
                 if check == "check_df":
                     self.check_df(item["metadata"]["name"])
 
-            #try:
-            #    if item["status"][status_condition][0]["status"] != "True":
-            #        if 'deploymentconfig' in item["metadata"]["labels"].keys():
-            #            pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"],
-            #                                                                                  item["status"]["phase"],
-            #                                                                                  item["status"][status_condition][0]["status"])
-            #            self.os_STATE = 2
-            #    else:
-            #        if 'deploymentconfig' in item["metadata"]["labels"].keys():
-            #            pods[item["metadata"]["labels"]["deploymentconfig"]] = "%s: [%s] " % (item["metadata"]["name"],
-            #                                                                             item["status"]["phase"])
-            #except:
-            #    pass
-
-        #registry_dc_name = 'docker-registry'
-        #router_dc_name = 'router'
-
         if not pod_exist:
              self.os_OUTPUT_MESSAGE += '%s [Missing] ' % podname
-             self.os_STATE = 2
+             self.os_STATE = STATE_CRITICAL
 
         #if registry_dc_name in pods:
         #    self.os_OUTPUT_MESSAGE += pods[registry_dc_name]
@@ -268,7 +278,10 @@ if __name__ == "__main__":
                      base_api=ARGS.base_api)
 
     if ARGS.check_df:
-        myos.get_pods(podname=ARGS.podname,check="check_df")
+        myos.get_pods(podname=ARGS.podname,
+                      check="check_df",
+                      warning=ARGS.warning,
+                      critical=ARGS.critical)
 
     try:
         STATE = myos.os_STATE
