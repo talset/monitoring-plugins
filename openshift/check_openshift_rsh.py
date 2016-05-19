@@ -41,43 +41,55 @@ STATE = STATE_OK
 OUTPUT_MESSAGE = ''
 
 PARSER = argparse.ArgumentParser(description='Openshift check pods')
-PARSER.add_argument("-proto", "--protocol", type=str,
-                            help='Protocol openshift (Default : https)',
-                                                default="https")
-PARSER.add_argument("-api", "--base_api", type=str,
-                            help='Url api and version (Default : /api/v1)',
-                                                default="/api/v1")
-PARSER.add_argument("-H", "--host", type=str,
-                            help='Host openshift (Default : 127.0.0.1)',
-                                                default="127.0.0.1")
-PARSER.add_argument("-P", "--port", type=str,
-                            help='Port openshift (Default : 8443)',
-                                                default=8443)
-PARSER.add_argument("-pn", "--podname", type=str,
+PARSER.add_argument("-proto", "--protocol",
+                    type=str,
+                    help='Protocol openshift (Default : https)',
+                    choices=['http', 'https'],
+                    default="https")
+PARSER.add_argument("-api", "--base_api",
+                    type=str,
+                    help='Url api and version (Default : /api/v1)',
+                    default="/api/v1")
+PARSER.add_argument("-H", "--host",
+                    type=str,
+                    help='Host openshift (Default : 127.0.0.1)',
+                    default="127.0.0.1")
+PARSER.add_argument("-P", "--port",
+                    type=int,
+                    help='Port openshift (Default : 8443)',
+                    default=8443)
+PARSER.add_argument("-pn", "--podname",
+                    type=str,
                     help='begining of the pods name')
-PARSER.add_argument("-n", "--namespace", type=str,
+PARSER.add_argument("-n", "--namespace",
+                    type=str,
                     help="Namespace",
                     default="default")
-
-PARSER.add_argument("-w", "--warning", type=str,
+PARSER.add_argument("-w", "--warning",
+                    type=int,
                     help='Warning value (Default : 85)',
                     default=85)
-PARSER.add_argument("-c", "--critical", type=str,
+PARSER.add_argument("-c", "--critical",
+                    type=int,
                     help='Critical value (Default : 95)',
                     default=95)
-PARSER.add_argument("-u", "--username", type=str,
+PARSER.add_argument("-u", "--username",
+                    type=str,
                     help='Username openshift (ex : sensu)')
-PARSER.add_argument("-p", "--password", type=str,
+PARSER.add_argument("-p", "--password",
+                    type=str,
                     help='Password openshift')
-PARSER.add_argument("-to", "--token", type=str,
+PARSER.add_argument("-to", "--token",
+                    type=str,
                     help='File with token openshift (like -t)')
-PARSER.add_argument("-tf", "--tokenfile", type=str,
+PARSER.add_argument("-tf", "--tokenfile",
+                    type=str,
                     help='Token openshift (use token or user/pass')
-
-PARSER.add_argument("--check_df", action='store_true',
+PARSER.add_argument("--check_df",
+                    action='store_true',
                     help='Check disk usage in the pod')
-
-PARSER.add_argument("-v", "--version", action='store_true',
+PARSER.add_argument("-v", "--version",
+                    action='store_true',
                     help='Print script version')
 ARGS = PARSER.parse_args()
 
@@ -158,76 +170,69 @@ class Openshift(object):
         return parsed_json
 
 
-    
     def check_df(self, pod):
 
-        exclude_mount=['/etc/hosts']
-        df_cmd = "df --exclude-type=tmpfs --exclude-type=devtmpfs --output=source,target,fstype,iused,itotal,ipcent,used,size,pcent --block-size G"
+        exclude_mount = ['/etc/hosts']
+        df_cmd = ("df --exclude-type=tmpfs "
+                  "--exclude-type=devtmpfs "
+                  "--output=source,target,fstype,iused,itotal,ipcent,used,size,pcent "
+                  "--block-size G")
         cmd = ("oc -n %s rsh %s %s 2>&1"
                % (self.namespace, pod, df_cmd))
+
         stdout = subprocess.check_output(cmd, shell=True).strip().split("\n")
-        #remove the header output
+        # remove the header output
         del stdout[0]
 
+        _output_message = []
         for line in stdout:
+            # Exclude filter on target mount point
+            col = line.split()
+            # 0: source
+            # 1: target
+            # 2: fstype
+            # 3: iused
+            # 4: itotal
+            # 5: ipcent
+            # 6: used
+            # 7: size
+            # 8: pcent
+            if col[1] in exclude_mount:
+                continue
 
-           col = line.split()
-           #0: source
-           #1: target
-           #2: fstype
-           #3: iused
-           #4: itotal
-           #5: ipcent
-           #6: used
-           #7: size
-           #8: pcent
-           if col[1] in exclude_mount:
-             continue
+            # csize: pourcent usage
+            csize = int(col[8].rstrip('%'))
+            if csize >= int(self.critical):  # CRITICAL
+                self.os_STATE = STATE_CRITICAL
+                _output_message.append("Disk Block %s: %s %s Used" % (pod, col[1], col[8]))
+            elif csize >= int(self.warning):  # WARNING
+                # Update state warning only if the current is not critical
+                if self.os_STATE < STATE_CRITICAL:
+                    self.os_STATE = STATE_WARNING
+                _output_message.append("Disk Block %s: %s %s Used" % (pod, col[1], col[8]))
 
-           #csize: pourcent usage
-           csize = int(col[8][:-1])
-           if csize >= int(self.warning):
-               status = "Warning"
-               #Update state warning only if the current is not critical
-               if self.os_STATE < STATE_CRITICAL:
-                   self.os_STATE = STATE_WARNING
-               if csize >= int(self.critical):
-                   self.os_STATE = STATE_CRITICAL
-               #self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s - %s/%s %s used" % (pod, col[0], col[1], col[6], col[7], col[8])
-               self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s Used ||" % (pod, col[1], col[8])
+            # cinode: pourcent usage inode
+            cinode = int(col[5].rstrip('%'))
+            if self.os_STATE < STATE_CRITICAL:  # CRITICAL
+                self.os_STATE = STATE_WARNING
+                _output_message.append("Disk Inode %s: %s %s Used" % (pod, col[1], col[5]))
+            elif cinode >= int(self.warning):  # WARNING
+                # Update state warning only if the current is not critical
+                if cinode >= int(self.critical):
+                    self.os_STATE = STATE_CRITICAL
+                _output_message.append("Disk Inode %s: %s %s Used" % (pod, col[1], col[5]))
 
-           #cinode: pourcent usage inode
-           cinode = int(col[6][:-1])
-           if cinode >= int(self.warning):
-               status = "Warning"
-               #Update state warning only if the current is not critical
-               if self.os_STATE < STATE_CRITICAL:
-                   self.os_STATE = STATE_WARNING
-               if cinode >= int(self.critical):
-                   self.os_STATE = STATE_CRITICAL
-               #self.os_OUTPUT_MESSAGE += " Disk Inode %s: %s %s - %s/%s %s used" % (pod, col[0], col[1], col[3], col[4], col[5])
-               self.os_OUTPUT_MESSAGE += " Disk Inode %s: %s %s Used ||" % (pod, col[1], col[5])
+        self.os_OUTPUT_MESSAGE += ' || '.join(_output_message)
 
-    def get_pods(self, podname=None, namespace=None, check=None, warning=None, critical=None):
+    def start_processing(self, podname=None, namespace=None, check=None, warning=85, critical=95):
 
-
-        if namespace:
-            self.namespace = namespace
-
-        if warning:
-            self.warning = warning
-        if critical:
-            self.critical = critical
+        self.namespace = namespace or self.namespace
+        self.warning = warning
+        self.critical = critical
 
         api_pods = '%s/namespaces/%s/pods' % (self.base_api, self.namespace)
 
         parsed_json = self.get_json(api_pods)
-
-
-        if self.base_api == '/api/v1beta3':
-            status_condition = 'Condition'
-        else:
-            status_condition = 'conditions'
 
         # Return unknow if we can't find datas
         if 'items' not in parsed_json:
@@ -237,11 +242,6 @@ class Openshift(object):
 
         pods = []
         for item in parsed_json["items"]:
-            #print item["metadata"]["name"]
-            #print item["metadata"]["labels"]["deploymentconfig"]
-            #print item["status"]["phase"]
-            #print item["status"][status_condition][0]["type"]
-            #print item["status"][status_condition][0]["status"]
 
             if item["metadata"]["name"].startswith(podname):
                 pods.append(item["metadata"]["name"])
@@ -249,11 +249,11 @@ class Openshift(object):
                     self.check_df(item["metadata"]["name"])
 
         if not pods:
-             self.os_OUTPUT_MESSAGE += '%s [Missing] ' % podname
-             self.os_STATE = STATE_CRITICAL
+            self.os_OUTPUT_MESSAGE += '%s [Missing] ' % podname
+            self.os_STATE = STATE_CRITICAL
 
         if self.os_STATE == STATE_OK:
-             self.os_OUTPUT_MESSAGE = ' Block/Inode %s' % (', '.join(pods))
+            self.os_OUTPUT_MESSAGE = ' Block/Inode %s' % (', '.join(pods))
 
 
 if __name__ == "__main__":
@@ -279,10 +279,10 @@ if __name__ == "__main__":
                      base_api=ARGS.base_api)
 
     if ARGS.check_df:
-        myos.get_pods(podname=ARGS.podname,
-                      check="check_df",
-                      warning=ARGS.warning,
-                      critical=ARGS.critical)
+        myos.start_processing(podname=ARGS.podname,
+                              check="check_df",
+                              warning=ARGS.warning,
+                              critical=ARGS.critical)
 
     try:
         STATE = myos.os_STATE
