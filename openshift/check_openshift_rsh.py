@@ -160,8 +160,8 @@ class Openshift(object):
 
     
     def check_df(self, pod):
-        print "check_df"
 
+        exclude_mount=['/etc/hosts']
         df_cmd = "df --exclude-type=tmpfs --exclude-type=devtmpfs --output=source,target,fstype,iused,itotal,ipcent,used,size,pcent --block-size G"
         cmd = ("oc -n %s rsh %s %s 2>&1"
                % (self.namespace, pod, df_cmd))
@@ -170,8 +170,21 @@ class Openshift(object):
         del stdout[0]
 
         for line in stdout:
+
            col = line.split()
-           #size
+           #0: source
+           #1: target
+           #2: fstype
+           #3: iused
+           #4: itotal
+           #5: ipcent
+           #6: used
+           #7: size
+           #8: pcent
+           if col[1] in exclude_mount:
+             continue
+
+           #csize: pourcent usage
            csize = int(col[8][:-1])
            if csize >= int(self.warning):
                status = "Warning"
@@ -183,7 +196,7 @@ class Openshift(object):
                #self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s - %s/%s %s used" % (pod, col[0], col[1], col[6], col[7], col[8])
                self.os_OUTPUT_MESSAGE += " Disk Block %s: %s %s Used ||" % (pod, col[1], col[8])
 
-           #inode
+           #cinode: pourcent usage inode
            cinode = int(col[6][:-1])
            if cinode >= int(self.warning):
                status = "Warning"
@@ -210,7 +223,6 @@ class Openshift(object):
 
         parsed_json = self.get_json(api_pods)
 
-        pods = {}
 
         if self.base_api == '/api/v1beta3':
             status_condition = 'Condition'
@@ -223,9 +235,7 @@ class Openshift(object):
             self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
             return
 
-        
-
-        pod_exist = False
+        pods = []
         for item in parsed_json["items"]:
             #print item["metadata"]["name"]
             #print item["metadata"]["labels"]["deploymentconfig"]
@@ -234,25 +244,16 @@ class Openshift(object):
             #print item["status"][status_condition][0]["status"]
 
             if item["metadata"]["name"].startswith(podname):
-                pod_exist = True
+                pods.append(item["metadata"]["name"])
                 if check == "check_df":
                     self.check_df(item["metadata"]["name"])
 
-        if not pod_exist:
+        if not pods:
              self.os_OUTPUT_MESSAGE += '%s [Missing] ' % podname
              self.os_STATE = STATE_CRITICAL
 
-        #if registry_dc_name in pods:
-        #    self.os_OUTPUT_MESSAGE += pods[registry_dc_name]
-        #else:
-        #    self.os_OUTPUT_MESSAGE += '%s [Missing] ' % registry_dc_name
-        #    self.os_STATE = 2
-
-        #if router_dc_name in pods:
-        #    self.os_OUTPUT_MESSAGE += pods[router_dc_name]
-        #else:
-        #    self.os_OUTPUT_MESSAGE += '%s [Missing] ' % router_dc_name
-        #    self.os_STATE = 2
+        if self.os_STATE == STATE_OK:
+             self.os_OUTPUT_MESSAGE = ' Block/Inode %s' % (', '.join(pods))
 
 
 if __name__ == "__main__":
