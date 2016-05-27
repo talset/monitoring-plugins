@@ -146,5 +146,5 @@ A valide kubeconfig need to be present in /root/.kube/config
 And allow to exec this script in sudoer file 
 
 ```bash
-ansible monitoring -m lineinfile -a "line='sensu ALL=(root) NOPASSWD: /usr/bin/python /opt/rcip-openshift-scripts/monitoring-plugins/check_openshift_rsh.py *' dest=/etc/sudoers.d/sensu create=yes"
+ansible monitoring -m lineinfile -a "line='sensu ALL=(root) NOPASSWD: /usr/bin/python /etc/sensu/plugins/monitoring-plugins/check_openshift_rsh.py *' dest=/etc/sudoers.d/sensu create=yes"
 ```
