@@ -21,7 +21,7 @@ import sys
 import argparse
 import subprocess
 
-VERSION = '1.0'
+VERSION = '1.1'
 
 STATE_TEXT = ['Ok', 'Warning', 'Critical', 'Unknow']
 
@@ -141,3 +141,4 @@ if __name__ == "__main__":
         sys.exit(STATE)
     except ValueError:
         print "Oops!  cant return STATE"
+        sys.exit(STATE_UNKNOWN)
