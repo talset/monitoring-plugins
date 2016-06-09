@@ -33,7 +33,7 @@ PARSER.add_argument("-b", "--base",
                     default="/")
 PARSER.add_argument("-e", "--excludes",
                     type=str, nargs='+',
-                    help='List of mountpoint to recurcively exclude ex: /var/lib/origin /var/lib/docker',
+                    help='List of mountpoint to exclude recurcively ex: /var/lib will exclude /var/lib*',
                     default=[])
 PARSER.add_argument("-w", "--warning",
                     type=int,
@@ -80,7 +80,7 @@ def check_df(base,warning,critical,excludes):
         # 6: used
         # 7: size
         # 8: pcent
-        if is_excluded(excludes,col[1]):
+        if not is_based(base,col[1]) or is_excluded(excludes,col[1]):
             continue
         _disk_ok.append(col[1])
 
@@ -117,6 +117,12 @@ def is_excluded(excludes,path):
     for ex in excludes:
         if path.startswith(ex):
             return True
+    return False
+
+def is_based(base,path):
+    #Check if the mount path is in the base path
+    if path.startswith(base):
+        return True
     return False
 
 if __name__ == "__main__":
