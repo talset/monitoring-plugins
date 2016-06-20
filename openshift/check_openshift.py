@@ -30,14 +30,14 @@ requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 from requests.exceptions import ConnectionError
 
-VERSION = '1.1'
+VERSION = '1.2'
 
 STATE_OK = 0
 STATE_WARNING = 1
 STATE_CRITICAL = 2
 STATE_UNKNOWN = 3
 
-STATE_TEXT = ['Ok', 'Warning', 'Critical', 'Unknow']
+STATE_TEXT = ['Ok', 'Warning', 'Critical', 'Unknown']
 
 STATE = STATE_OK
 OUTPUT_MESSAGE = ''
@@ -74,6 +74,10 @@ PARSER.add_argument("--check_labels", action='store_true',
 PARSER.add_argument("--label_offline", type=str,
                     help='Your "OFFLINE" label name (Default: retiring)',
                     default="retiring")
+PARSER.add_argument("--check_project_labels", action='store_true',
+                    help='Check if your projects have the required labels set (define by --required_project_labels)')
+PARSER.add_argument("--required_project_labels", type=str, nargs='+',
+                    help='The names of your required project labels as comma separated list')
 PARSER.add_argument("-v", "--version", action='store_true',
                     help='Print script version')
 ARGS = PARSER.parse_args()
@@ -288,7 +292,7 @@ class Openshift(object):
         api_nodes = '%s/nodes' % self.base_api
         parsed_json = self.get_json(api_nodes)
 
-        # Return unknow if we can't find datas
+        # Return unknow if we can't find data
         if 'items' not in parsed_json:
             self.os_STATE = STATE_UNKNOWN
             self.os_OUTPUT_MESSAGE = ' Unable to find nodes data in the response.'
@@ -314,6 +318,36 @@ class Openshift(object):
         if self.os_STATE == 0:
             self.os_OUTPUT_MESSAGE += '%s[schedulable]' % all_nodes_names
 
+    def get_project_labels(self, required_labels):
+
+        api_namespaces = '%s/namespaces' % self.base_api
+        parsed_json = self.get_json(api_namespaces)
+
+        # Return unknown if we can't find data
+        if 'items' not in parsed_json:
+            self.os_STATE = STATE_UNKNOWN
+            self.os_OUTPUT_MESSAGE = ' Unable to find projects data in the response.'
+            return
+
+        all_project_names = []
+        all_project_names_nok = []
+        for project in parsed_json["items"]:
+            all_project_names.append(project["metadata"]["name"])
+            if 'labels' not in project["metadata"]:
+                all_project_names_nok.append(project["metadata"]["name"])
+                self.os_STATE = STATE_CRITICAL
+            else:
+                  for required_label in required_labels:
+                      if not required_label in project["metadata"]["labels"].keys():
+                          all_project_names_nok.append(project["metadata"]["name"])
+                          self.os_STATE = STATE_CRITICAL
+                          break
+
+        if self.os_STATE == 0:
+            self.os_OUTPUT_MESSAGE += " Project(s) '%s' labeled with '%s'." % ( ', '.join(all_project_names), ', '.join(required_labels))
+
+        if self.os_STATE != 0:
+            self.os_OUTPUT_MESSAGE += " Project(s) '%s' not labeled with '%s'." % ( ', '.join(all_project_names_nok), ', '.join(required_labels))
 
 if __name__ == "__main__":
 
@@ -344,6 +378,9 @@ if __name__ == "__main__":
 
     if ARGS.check_labels:
         myos.get_labels(ARGS.label_offline)
+
+    if ARGS.check_project_labels:
+        myos.get_project_labels(ARGS.required_project_labels)
 
     if ARGS.check_scheduling:
         myos.get_scheduling()
